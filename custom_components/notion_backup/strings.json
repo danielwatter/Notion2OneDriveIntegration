@@ -1,0 +1,94 @@
+{
+  "title": "Notion Backup",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Notion connection",
+        "description": "Enter a read token and the root pages to back up. The first backup starts automatically after setup.",
+        "data": {
+          "name": "Notion connection name",
+          "notion_token": "Notion integration token",
+          "root_pages": "Root pages / databases: IDs or URLs, one per line",
+          "backup_folder": "OneDrive base folder",
+          "hour": "Daily backup: hour (HA time zone)",
+          "minute": "Daily backup: minute"
+        }
+      },
+      "onedrive": {
+        "title": "Connect OneDrive",
+        "description": "Notion workspace: **{workspace}**. Enter the client ID of your Microsoft app with public client flows enabled. See the repository setup guide.",
+        "data": {
+          "client_id": "Microsoft application (client) ID"
+        }
+      },
+      "authorize": {
+        "title": "Sign in to Microsoft",
+        "description": "Open [{url}]({url}), enter **{code}**, and sign in to the intended OneDrive account. Then submit this form.",
+        "data": {}
+      },
+      "notion_reauth": {
+        "title": "Renew Notion credentials",
+        "data": {
+          "notion_token": "Notion integration token"
+        }
+      }
+    },
+    "error": {
+      "invalid_settings": "Invalid root pages or OneDrive folder.",
+      "invalid_auth": "Access denied. Check credentials, sharing permissions and Microsoft app configuration.",
+      "cannot_connect": "Connection or content access failed. Check sharing permissions and network.",
+      "invalid_client": "Enter a valid Microsoft client ID (UUID).",
+      "authorization_pending": "Sign-in is pending. Complete Microsoft sign-in, wait a few seconds, and submit again."
+    },
+    "abort": {
+      "already_configured": "This Notion connection is already configured.",
+      "login_expired": "Microsoft sign-in expired. Start setup again.",
+      "wrong_drive": "A different OneDrive was selected. Sign in with the originally configured account.",
+      "wrong_notion": "This token belongs to another Notion connection.",
+      "reauth_successful": "Authentication renewed."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Backup settings",
+        "data": {
+          "root_pages": "Root pages / databases: IDs or URLs, one per line",
+          "backup_folder": "OneDrive base folder",
+          "hour": "Daily backup: hour (HA time zone)",
+          "minute": "Daily backup: minute"
+        }
+      }
+    },
+    "error": {
+      "invalid_settings": "Invalid root pages or OneDrive folder.",
+      "invalid_auth": "Access denied. Check credentials, sharing permissions and Microsoft app configuration.",
+      "cannot_connect": "Connection or content access failed. Check sharing permissions and network.",
+      "invalid_client": "Enter a valid Microsoft client ID (UUID).",
+      "authorization_pending": "Sign-in is pending. Complete Microsoft sign-in, wait a few seconds, and submit again."
+    }
+  },
+  "entity": {
+    "button": {
+      "backup_now": {
+        "name": "Back up now"
+      }
+    },
+    "sensor": {
+      "last_success": {
+        "name": "Last successful backup"
+      },
+      "status": {
+        "name": "Backup status",
+        "state": {
+          "idle": "Idle",
+          "running": "Running",
+          "completed": "Completed",
+          "incomplete": "Incomplete",
+          "failed": "Failed",
+          "interrupted": "Interrupted"
+        }
+      }
+    }
+  }
+}

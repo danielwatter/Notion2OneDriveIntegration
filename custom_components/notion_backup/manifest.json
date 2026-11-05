@@ -1,0 +1,12 @@
+{
+  "domain": "notion_backup",
+  "name": "Notion Backup",
+  "version": "0.1.0",
+  "documentation": "https://github.com/danielwatter/Notion2OneDriveIntegration",
+  "issue_tracker": "https://github.com/danielwatter/Notion2OneDriveIntegration/issues",
+  "codeowners": ["@danielwatter"],
+  "config_flow": true,
+  "integration_type": "service",
+  "iot_class": "cloud_polling",
+  "requirements": []
+}

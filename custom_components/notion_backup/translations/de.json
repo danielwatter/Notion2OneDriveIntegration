@@ -1,0 +1,94 @@
+{
+  "title": "Notion Backup",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Notion-Verbindung",
+        "description": "Lesetoken und die zu sichernden Startseiten angeben. Nach Abschluss startet die erste Sicherung automatisch.",
+        "data": {
+          "name": "Name der Notion-Verbindung",
+          "notion_token": "Notion-Integrationstoken",
+          "root_pages": "Startseiten / Datenbanken: IDs oder URLs, eine pro Zeile",
+          "backup_folder": "OneDrive-Basisordner",
+          "hour": "Tägliche Sicherung: Stunde (HA-Zeitzone)",
+          "minute": "Tägliche Sicherung: Minute"
+        }
+      },
+      "onedrive": {
+        "title": "OneDrive verbinden",
+        "description": "Notion-Workspace: **{workspace}**. Die Client-ID deiner Microsoft-App mit aktivierten öffentlichen Clientflows eingeben. Siehe Anleitung im Repository.",
+        "data": {
+          "client_id": "Microsoft-Anwendungs-ID (Client-ID)"
+        }
+      },
+      "authorize": {
+        "title": "Bei Microsoft anmelden",
+        "description": "Öffne [{url}]({url}), gib den Code **{code}** ein und melde dich beim gewünschten OneDrive-Account an. Danach hier bestätigen.",
+        "data": {}
+      },
+      "notion_reauth": {
+        "title": "Notion-Zugang erneuern",
+        "data": {
+          "notion_token": "Notion-Integrationstoken"
+        }
+      }
+    },
+    "error": {
+      "invalid_settings": "Startseiten oder OneDrive-Ordner ungültig.",
+      "invalid_auth": "Zugriff verweigert. Token, Freigaben oder Microsoft-App-Konfiguration prüfen.",
+      "cannot_connect": "Verbindung oder Inhaltszugriff fehlgeschlagen. Freigaben und Netzwerk prüfen.",
+      "invalid_client": "Bitte eine gültige Microsoft-Client-ID (UUID) eingeben.",
+      "authorization_pending": "Anmeldung steht noch aus. Zuerst bei Microsoft anmelden, kurz warten und erneut bestätigen."
+    },
+    "abort": {
+      "already_configured": "Diese Notion-Verbindung ist bereits eingerichtet.",
+      "login_expired": "Microsoft-Anmeldung abgelaufen. Einrichtung erneut starten.",
+      "wrong_drive": "Anderes OneDrive-Laufwerk gewählt. Bitte mit dem ursprünglich eingerichteten Account anmelden.",
+      "wrong_notion": "Der Token gehört zu einer anderen Notion-Verbindung.",
+      "reauth_successful": "Anmeldung erneuert."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Sicherungseinstellungen",
+        "data": {
+          "root_pages": "Startseiten / Datenbanken: IDs oder URLs, eine pro Zeile",
+          "backup_folder": "OneDrive-Basisordner",
+          "hour": "Tägliche Sicherung: Stunde (HA-Zeitzone)",
+          "minute": "Tägliche Sicherung: Minute"
+        }
+      }
+    },
+    "error": {
+      "invalid_settings": "Startseiten oder OneDrive-Ordner ungültig.",
+      "invalid_auth": "Zugriff verweigert. Token, Freigaben oder Microsoft-App-Konfiguration prüfen.",
+      "cannot_connect": "Verbindung oder Inhaltszugriff fehlgeschlagen. Freigaben und Netzwerk prüfen.",
+      "invalid_client": "Bitte eine gültige Microsoft-Client-ID (UUID) eingeben.",
+      "authorization_pending": "Anmeldung steht noch aus. Zuerst bei Microsoft anmelden, kurz warten und erneut bestätigen."
+    }
+  },
+  "entity": {
+    "button": {
+      "backup_now": {
+        "name": "Jetzt sichern"
+      }
+    },
+    "sensor": {
+      "last_success": {
+        "name": "Letzte erfolgreiche Sicherung"
+      },
+      "status": {
+        "name": "Sicherungsstatus",
+        "state": {
+          "idle": "Bereit",
+          "running": "Sicherung läuft",
+          "completed": "Abgeschlossen",
+          "incomplete": "Unvollständig",
+          "failed": "Fehlgeschlagen",
+          "interrupted": "Unterbrochen"
+        }
+      }
+    }
+  }
+}
