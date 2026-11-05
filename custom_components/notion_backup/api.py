@@ -194,6 +194,8 @@ class OneDriveClient:
         client_id,
         refresh_token,
         save_refresh: Callable[[str], Awaitable[None]],
+        *,
+        token_provider: Callable[[], Awaitable[str]] | None = None,
     ):
         self.session = session
         self.auth = MicrosoftAuth(session, client_id)
@@ -201,8 +203,12 @@ class OneDriveClient:
         self.save_refresh = save_refresh
         self.access_token = ""
         self.expires = 0.0
+        self.token_provider = token_provider
 
     async def token(self):
+        if self.token_provider is not None:
+            # HA owns authentication and token rotation for a linked OneDrive entry.
+            return await self.token_provider()
         if time.monotonic() >= self.expires:
             data = await self.auth.exchange(
                 grant_type="refresh_token",
@@ -229,8 +235,8 @@ class OneDriveClient:
             **kwargs,
         )
 
-    async def folder(self, drive_id, parts):
-        parent = "root"
+    async def folder(self, drive_id, parts, *, root_id=None):
+        parent = f"items/{quote(root_id, safe='')}" if root_id else "root"
         for part in parts:
             base = f"drives/{quote(drive_id, safe='')}/{parent}"
             try:

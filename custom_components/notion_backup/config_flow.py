@@ -10,6 +10,9 @@ from homeassistant import config_entries
 from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.selector import (
+    SelectSelector,
+    SelectSelectorConfig,
+    SelectSelectorMode,
     TextSelector,
     TextSelectorConfig,
     TextSelectorType,
@@ -25,6 +28,7 @@ from .api import (
     parse_roots,
 )
 from .const import DEFAULT_FOLDER, DOMAIN
+from .linked_onedrive import linked_drive, onedrive_entries
 
 
 def settings_schema(data):
@@ -58,6 +62,7 @@ class NotionBackupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self.device = None
         self.deadline = 0.0
         self.next_poll = 0.0
+        self.custom_step = "onedrive"
 
     async def async_step_user(self, user_input=None):
         errors = {}
@@ -99,6 +104,76 @@ class NotionBackupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
     async def async_step_onedrive(self, user_input=None):
+        if user_input is None and onedrive_entries(self.hass):
+            return self.async_show_menu(
+                step_id="onedrive",
+                menu_options=["onedrive_existing", "onedrive_custom"],
+                description_placeholders={"workspace": self.values.get("workspace_name", "Notion")},
+            )
+        self.custom_step = "onedrive"
+        return await self._async_step_custom(user_input)
+
+    async def async_step_onedrive_custom(self, user_input=None):
+        self.custom_step = "onedrive_custom"
+        return await self._async_step_custom(user_input)
+
+    async def async_step_onedrive_existing(self, user_input=None):
+        entries = onedrive_entries(self.hass)
+        if not entries:
+            return self.async_abort(reason="no_onedrive")
+        errors = {}
+        if user_input is not None:
+            selected = user_input.get("onedrive_entry_id")
+            if selected not in {entry.entry_id for entry in entries}:
+                errors["base"] = "onedrive_unavailable"
+            else:
+                try:
+                    _, info, _, app_folder = await linked_drive(self.hass, selected)
+                    if self.source == config_entries.SOURCE_REAUTH:
+                        if self.values["drive_id"] != info["id"]:
+                            return self.async_abort(reason="wrong_drive")
+                except AuthenticationError:
+                    errors["base"] = "onedrive_auth"
+                except BackupError:
+                    errors["base"] = "onedrive_unavailable"
+                else:
+                    # Remove standalone OAuth credentials when linking an HA account.
+                    values = {
+                        k: v
+                        for k, v in self.values.items()
+                        if k not in {"client_id", "refresh_token"}
+                    }
+                    values.update(
+                        onedrive_entry_id=selected,
+                        drive_id=info["id"],
+                        drive_name=next(e.title for e in entries if e.entry_id == selected),
+                        app_folder_name=app_folder,
+                    )
+                    if self.source == config_entries.SOURCE_REAUTH:
+                        return self.async_update_reload_and_abort(
+                            self._get_reauth_entry(),
+                            data=values,
+                        )
+                    return self.async_create_entry(title=values["name"], data=values)
+        return self.async_show_form(
+            step_id="onedrive_existing",
+            errors=errors,
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        "onedrive_entry_id",
+                        default=self.values.get("onedrive_entry_id", entries[0].entry_id),
+                    ): SelectSelector(
+                        SelectSelectorConfig(
+                            options=[{"value": e.entry_id, "label": e.title} for e in entries],
+                            mode=SelectSelectorMode.DROPDOWN,
+                        )
+                    ),
+                }
+            ),
+        )
+
+    async def _async_step_custom(self, user_input=None):
         errors = {}
         if user_input is not None:
             try:
@@ -116,7 +191,7 @@ class NotionBackupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             except BackupError:
                 errors["base"] = "cannot_connect"
         return self.async_show_form(
-            step_id="onedrive",
+            step_id=self.custom_step,
             errors=errors,
             description_placeholders={"workspace": self.values.get("workspace_name", "Notion")},
             data_schema=vol.Schema(
@@ -194,6 +269,8 @@ class NotionBackupConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self.values = dict(entry_data)
         if self.context.get("notion_auth"):
             return await self.async_step_notion_reauth()
+        if self.values.get("onedrive_entry_id"):
+            return await self.async_step_onedrive_existing()
         return await self.async_step_onedrive()
 
     async def async_step_notion_reauth(self, user_input=None):

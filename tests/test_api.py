@@ -239,3 +239,39 @@ async def test_cancellation_is_not_retried():
             mock.get("https://example.com/api", exception=asyncio.CancelledError())
             with pytest.raises(asyncio.CancelledError):
                 await json_request(session, "GET", "https://example.com/api", service="Test")
+
+
+async def test_linked_token_provider_owns_refresh_and_is_used_for_each_request():
+    provider = AsyncMock(side_effect=["first-token", "renewed-token"])
+    async with aiohttp.ClientSession() as session:
+        drive = OneDriveClient(session, "", "", None, token_provider=provider)
+        with (
+            aioresponses() as mock,
+            patch.object(drive.auth, "exchange", new_callable=AsyncMock) as exchange,
+        ):
+            mock.get(f"{GRAPH_API}/me/drive", payload={"id": "drive"}, repeat=True)
+            await drive.request("GET", "me/drive")
+            await drive.request("GET", "me/drive")
+            calls = next(iter(mock.requests.values()))
+            assert calls[0].kwargs["headers"]["Authorization"] == "Bearer first-token"
+            assert calls[1].kwargs["headers"]["Authorization"] == "Bearer renewed-token"
+            exchange.assert_not_called()
+    assert provider.await_count == 2
+
+
+async def test_linked_folder_is_created_inside_app_root_not_drive_root():
+    async with aiohttp.ClientSession() as session:
+        drive = OneDriveClient(
+            session, "", "", None, token_provider=AsyncMock(return_value="access")
+        )
+        with aioresponses() as mock:
+            mock.get(f"{GRAPH_API}/drives/drive/items/app-root:/Notion%20Backups", status=404)
+            mock.post(
+                f"{GRAPH_API}/drives/drive/items/app-root/children",
+                payload={"id": "notion-folder", "folder": {}},
+            )
+            assert (
+                await drive.folder("drive", ["Notion Backups"], root_id="app-root")
+                == "notion-folder"
+            )
+            assert all("/root" not in str(url) for _, url in mock.requests)

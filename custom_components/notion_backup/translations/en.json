@@ -16,9 +16,13 @@
       },
       "onedrive": {
         "title": "Connect OneDrive",
-        "description": "Notion workspace: **{workspace}**. Enter the client ID of your Microsoft app with public client flows enabled. See the repository setup guide.",
+        "description": "Notion workspace: **{workspace}**. Use a OneDrive connection already configured in Home Assistant, or use your own Microsoft app.",
         "data": {
           "client_id": "Microsoft application (client) ID"
+        },
+        "menu_options": {
+          "onedrive_existing": "Use an existing OneDrive connection",
+          "onedrive_custom": "Use a custom Microsoft app (optional)"
         }
       },
       "authorize": {
@@ -31,6 +35,20 @@
         "data": {
           "notion_token": "Notion integration token"
         }
+      },
+      "onedrive_custom": {
+        "title": "Use a custom Microsoft app",
+        "description": "Notion workspace: **{workspace}**. Enter the client ID of your Microsoft app with public client flows enabled. See the repository setup guide.",
+        "data": {
+          "client_id": "Microsoft application (client) ID"
+        }
+      },
+      "onedrive_existing": {
+        "title": "Select an existing OneDrive",
+        "description": "Choose your OneDrive connection. Home Assistant manages sign-in. ZIPs are stored inside its app folder (Home Assistant or Graph), under your base folder and a separate folder for each Notion connection. The first backup starts after confirmation.",
+        "data": {
+          "onedrive_entry_id": "OneDrive connection"
+        }
       }
     },
     "error": {
@@ -38,14 +56,17 @@
       "invalid_auth": "Access denied. Check credentials, sharing permissions and Microsoft app configuration.",
       "cannot_connect": "Connection or content access failed. Check sharing permissions and network.",
       "invalid_client": "Enter a valid Microsoft client ID (UUID).",
-      "authorization_pending": "Sign-in is pending. Complete Microsoft sign-in, wait a few seconds, and submit again."
+      "authorization_pending": "Sign-in is pending. Complete Microsoft sign-in, wait a few seconds, and submit again.",
+      "onedrive_unavailable": "The selected OneDrive connection is not ready. Check it in Devices & services and try again.",
+      "onedrive_auth": "Renew sign-in in the existing OneDrive integration first."
     },
     "abort": {
       "already_configured": "This Notion connection is already configured.",
       "login_expired": "Microsoft sign-in expired. Start setup again.",
       "wrong_drive": "A different OneDrive was selected. Sign in with the originally configured account.",
       "wrong_notion": "This token belongs to another Notion connection.",
-      "reauth_successful": "Authentication renewed."
+      "reauth_successful": "Authentication renewed.",
+      "no_onedrive": "No active OneDrive connection is configured. Set up the OneDrive integration first."
     }
   },
   "options": {

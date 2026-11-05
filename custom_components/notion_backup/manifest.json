@@ -1,7 +1,7 @@
 {
   "domain": "notion_backup",
   "name": "Notion Backup",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "documentation": "https://github.com/danielwatter/Notion2OneDriveIntegration",
   "issue_tracker": "https://github.com/danielwatter/Notion2OneDriveIntegration/issues",
   "codeowners": ["@danielwatter"],

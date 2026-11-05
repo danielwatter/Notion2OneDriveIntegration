@@ -10,10 +10,10 @@ from datetime import timedelta
 from pathlib import Path
 from uuid import uuid4
 
-from homeassistant.config_entries import ConfigEntry
+from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.const import EVENT_HOMEASSISTANT_STOP, MAJOR_VERSION, MINOR_VERSION, Platform
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.exceptions import HomeAssistantError
+from homeassistant.exceptions import ConfigEntryNotReady, HomeAssistantError
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import async_track_time_change
@@ -30,12 +30,22 @@ from .api import (
 )
 from .archive import Exporter, create_zip, safe_name
 from .const import DOMAIN
+from .linked_onedrive import linked_drive
 
 PLATFORMS = [Platform.SENSOR, Platform.BUTTON]
 _LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
+    if source_id := entry.data.get("onedrive_entry_id"):
+        source = hass.config_entries.async_get_entry(source_id)
+        if (
+            source is not None
+            and source.disabled_by is None
+            and source.state is not ConfigEntryState.LOADED
+        ):
+            # Retry through HA rather than assuming startup order between integrations.
+            raise ConfigEntryNotReady("Waiting for the selected OneDrive connection")
     runtime = BackupRuntime(hass, entry)
     entry.runtime_data = runtime
     await runtime.load()
@@ -168,15 +178,26 @@ class BackupRuntime:
                 )
                 self.settings["refresh_token"] = token
 
-            drive = OneDriveClient(
-                session,
-                self.settings["client_id"],
-                self.entry.data["refresh_token"],
-                save_refresh,
-            )
-            info = await drive.request("GET", "me/drive")
-            if info["id"] != self.settings["drive_id"]:
-                raise AuthenticationError("OneDrive destination identity changed")
+            app_root_id = None
+            if linked_entry_id := self.settings.get("onedrive_entry_id"):
+                drive, info, app_root_id, app_folder_name = await linked_drive(
+                    self.hass,
+                    linked_entry_id,
+                    self.settings["drive_id"],
+                )
+                self.state["destination"] = (
+                    f"Apps/{app_folder_name}/{self.settings['backup_folder']}"
+                )
+            else:
+                drive = OneDriveClient(
+                    session,
+                    self.settings["client_id"],
+                    self.entry.data["refresh_token"],
+                    save_refresh,
+                )
+                info = await drive.request("GET", "me/drive")
+                if info["id"] != self.settings["drive_id"]:
+                    raise AuthenticationError("OneDrive destination identity changed")
             temporary = Path(
                 await self.hass.async_add_executor_job(tempfile.mkdtemp, "", "notion_backup_")
             )
@@ -202,7 +223,10 @@ class BackupRuntime:
             parts = folder_parts(self.settings["backup_folder"]) + [
                 f"{safe_name(self.entry.title)}_{self.settings['notion_bot_id']}",
             ]
-            folder_id = await drive.folder(info["id"], parts)
+            if app_root_id is not None:
+                folder_id = await drive.folder(info["id"], parts, root_id=app_root_id)
+            else:
+                folder_id = await drive.folder(info["id"], parts)
             item = await drive.upload(info["id"], folder_id, archive_path)
             self.state.update(
                 status="completed" if manifest["complete"] else "incomplete",
@@ -227,9 +251,16 @@ class BackupRuntime:
             raise
         except AuthenticationError as err:
             self.state.update(status="failed", error=str(err))
-            self.entry.async_start_reauth(
-                self.hass, context={"notion_auth": str(err).startswith("Notion")}
-            )
+            if not str(err).startswith("Notion") and self.settings.get("onedrive_entry_id"):
+                linked_entry = self.hass.config_entries.async_get_entry(
+                    self.settings["onedrive_entry_id"]
+                )
+                if linked_entry is not None:
+                    linked_entry.async_start_reauth(self.hass)
+            else:
+                self.entry.async_start_reauth(
+                    self.hass, context={"notion_auth": str(err).startswith("Notion")}
+                )
         except BackupError as err:
             self.state.update(status="failed", error=str(err))
         except Exception:

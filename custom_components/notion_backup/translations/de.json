@@ -16,9 +16,13 @@
       },
       "onedrive": {
         "title": "OneDrive verbinden",
-        "description": "Notion-Workspace: **{workspace}**. Die Client-ID deiner Microsoft-App mit aktivierten öffentlichen Clientflows eingeben. Siehe Anleitung im Repository.",
+        "description": "Notion-Workspace: **{workspace}**. Verwende eine bereits in Home Assistant eingerichtete OneDrive-Verbindung. Alternativ ist eine eigene Microsoft-App möglich.",
         "data": {
           "client_id": "Microsoft-Anwendungs-ID (Client-ID)"
+        },
+        "menu_options": {
+          "onedrive_existing": "Vorhandene OneDrive-Verbindung verwenden",
+          "onedrive_custom": "Eigene Microsoft-App verwenden (optional)"
         }
       },
       "authorize": {
@@ -31,6 +35,20 @@
         "data": {
           "notion_token": "Notion-Integrationstoken"
         }
+      },
+      "onedrive_custom": {
+        "title": "Eigene Microsoft-App verwenden",
+        "description": "Notion-Workspace: **{workspace}**. Die Client-ID deiner Microsoft-App mit aktivierten öffentlichen Clientflows eingeben. Siehe Anleitung im Repository.",
+        "data": {
+          "client_id": "Microsoft-Anwendungs-ID (Client-ID)"
+        }
+      },
+      "onedrive_existing": {
+        "title": "Vorhandenes OneDrive auswählen",
+        "description": "Wähle die gewünschte OneDrive-Verbindung. Home Assistant übernimmt die Anmeldung. Die ZIPs werden im App-Ordner dieser Verbindung (Home Assistant bzw. Graph) unter deinem Basisordner und einem eigenen Ordner je Notion-Verbindung gespeichert. Nach Bestätigung startet die erste Sicherung.",
+        "data": {
+          "onedrive_entry_id": "OneDrive-Verbindung"
+        }
       }
     },
     "error": {
@@ -38,14 +56,17 @@
       "invalid_auth": "Zugriff verweigert. Token, Freigaben oder Microsoft-App-Konfiguration prüfen.",
       "cannot_connect": "Verbindung oder Inhaltszugriff fehlgeschlagen. Freigaben und Netzwerk prüfen.",
       "invalid_client": "Bitte eine gültige Microsoft-Client-ID (UUID) eingeben.",
-      "authorization_pending": "Anmeldung steht noch aus. Zuerst bei Microsoft anmelden, kurz warten und erneut bestätigen."
+      "authorization_pending": "Anmeldung steht noch aus. Zuerst bei Microsoft anmelden, kurz warten und erneut bestätigen.",
+      "onedrive_unavailable": "Die ausgewählte OneDrive-Verbindung ist nicht bereit. Prüfe sie unter Geräte & Dienste und versuche es erneut.",
+      "onedrive_auth": "Erneuere zuerst die Anmeldung der bestehenden OneDrive-Integration."
     },
     "abort": {
       "already_configured": "Diese Notion-Verbindung ist bereits eingerichtet.",
       "login_expired": "Microsoft-Anmeldung abgelaufen. Einrichtung erneut starten.",
       "wrong_drive": "Anderes OneDrive-Laufwerk gewählt. Bitte mit dem ursprünglich eingerichteten Account anmelden.",
       "wrong_notion": "Der Token gehört zu einer anderen Notion-Verbindung.",
-      "reauth_successful": "Anmeldung erneuert."
+      "reauth_successful": "Anmeldung erneuert.",
+      "no_onedrive": "Keine aktive OneDrive-Verbindung vorhanden. Richte zuerst die OneDrive-Integration ein."
     }
   },
   "options": {

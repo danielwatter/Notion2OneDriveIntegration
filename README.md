@@ -4,11 +4,12 @@
 
 Home-Assistant-Custom-Integration für tägliche **ZIP-Sicherungen von Notion-Inhalten und Anhängen** nach OneDrive. Mehrere Notion-Verbindungen werden als separate Instanzen eingerichtet. Installation direkt aus Git per SSH; HACS ist optional.
 
-**Stand: 0.1.2.** Unterstützt und automatisch getestet mit Home Assistant Core **2026.10.4 und 2026.11.0**. Version 0.1.2 ergänzt ein eigenes Logo als lokale Home-Assistant-Brand-Bilder, auch für hochauflösende Displays und dunkle Oberflächen. Version 0.1.1 berücksichtigt den geänderten Rückgabewert beim Laden/Entladen von Integrationen ab HA 2026.11. Ein echter Sicherungslauf mit deinen Accounts ist nach der Einrichtung noch zu prüfen.
+**Stand: 0.2.0.** Unterstützt und automatisch getestet mit Home Assistant Core **2026.10.4 und 2026.11.0**. Ab Version 0.2.0 kann eine **bereits in Home Assistant eingerichtete OneDrive-Verbindung** ausgewählt werden. Das funktioniert mit OneDrive Personal / Microsoft 365 Family ohne eigene Microsoft-App-Registrierung. Ein echter Sicherungslauf mit deinen Accounts ist nach der Einrichtung noch zu prüfen.
 
 ## Funktionen
 
 - Einrichtung, Zielordner und tägliche Uhrzeit über die Home-Assistant-Oberfläche.
+- Vorhandene OneDrive-Verbindung auswählen; Anmeldung und Token-Erneuerung übernimmt HA. Beide Notion-Instanzen können dasselbe private OneDrive verwenden.
 - Je Notion-Verbindung ein separater Sicherungslauf und ein eigener OneDrive-Unterordner.
 - Frei wählbare Startseiten und Datenbanken; zugängliche Unterseiten, Datenquellen und Datenbankeinträge werden rekursiv gelesen.
 - Pro Lauf eine datierte ZIP mit Markdown, JSON und lokal gespeicherten Anhängen.
@@ -59,7 +60,21 @@ Alternativ kann dieses Repository in einer vorhandenen Oberfläche mit Unterstü
 
 Die Integration prüft Token und Startseiten. Die Notion-Suche wird bewusst nicht als vollständiges Inhaltsverzeichnis benutzt: [Notion weist auf deren Unvollständigkeit hin](https://developers.notion.com/reference/search-optimizations-and-limitations).
 
-## 2. Microsoft / OneDrive vorbereiten
+## 2. Vorhandenes OneDrive verwenden (empfohlen für Microsoft 365 Family)
+
+1. Die offizielle **OneDrive**-Integration in Home Assistant einrichten, falls sie noch nicht verbunden ist. Die normale Anmeldung unterstützt private Microsoft-Konten ohne eigene App-Registrierung.
+2. Im Notion-Backup-Dialog **Vorhandene OneDrive-Verbindung verwenden** auswählen.
+3. Die gewünschte Verbindung, beispielsweise **Daniel Watter's OneDrive**, auswählen und bestätigen.
+
+Die Notion-Integration speichert die Referenz auf diese HA-Verbindung und die Laufwerks-ID. Sie verwendet die von OneDrive bereitgestellte, refreshfähige Token-Funktion. Microsoft-Zugangsdaten werden nicht aus dem Konfigurationsspeicher kopiert und keine zweite Anmeldung wird angelegt. Nach dem Abschluss startet automatisch die erste Sicherung.
+
+Die ZIPs werden innerhalb des App-Ordners dieser Verbindung angelegt: **`Apps/Home Assistant/Notion Backups/…`**. Wegen einer Microsoft-Eigenheit heißt der App-Ordner teilweise **`Graph`** oder wurde von dir umbenannt; die Integration verwendet seine ID und zeigt den ermittelten Pfad im Statussensor an. Ein eigener Unterordner je Notion-Verbindung hält die Sicherungen getrennt. Die normalen HA-Backups bleiben in ihrem bisherigen Ordner. [OneDrive-Dokumentation](https://www.home-assistant.io/integrations/onedrive/)
+
+Die gewählte OneDrive-Verbindung muss für jeden Sicherungslauf geladen sein. Wird sie deaktiviert oder entfernt, stoppt die Notion-Sicherung mit einem Fehler; es erfolgt kein automatischer Wechsel zu einem anderen Account. Erneute Microsoft-Anmeldungen erfolgen in der bestehenden OneDrive-Integration. Bestehende Instanzen mit separater App-Anmeldung funktionieren weiterhin unverändert.
+
+## Alternative: eigene Microsoft-App
+
+Wenn noch keine OneDrive-Verbindung existiert oder im Auswahlmenü **Eigene Microsoft-App verwenden** gewählt wird, ist weiterhin eine separate Anmeldung möglich. Dafür brauchst du Zugang zu einem Azure-/Entra-Verzeichnis mit Berechtigung zur App-Registrierung. Ein Microsoft-365-Family-Abo allein stellt dieses Verzeichnis nicht bereit. Für vorhandene private OneDrives ist der oben beschriebene Weg einfacher.
 
 Unterstützt werden OneDrive Personal und OneDrive Business über Microsoft Graph. Die Anmeldung erfolgt per Gerätecode; ein Client-Secret ist nicht nötig.
 
@@ -78,10 +93,14 @@ Beispiel (der Basisordner ist frei einstellbar):
 
 ```text
 OneDrive/
-└── Notion Backups/
-    └── DHW_<notion-bot-id>/
-        └── Notion_DHW_2026-11-05_020000_<run-id>.zip
+└── Apps/
+    └── Home Assistant/             (teilweise Graph oder eigener Name)
+        └── Notion Backups/
+            └── DHW Holding GmbH_<notion-bot-id>/
+                └── Notion_DHW Holding GmbH_2026-11-05_020000_<run-id>.zip
 ```
+
+Bei der optionalen separaten App-Anmeldung liegt der Basisordner direkt im Hauptverzeichnis des gewählten OneDrive. Bei Wiederverwendung der HA-Verbindung bleibt die Ablage innerhalb ihres erlaubten App-Ordners.
 
 Die Uhrzeit im **Dateinamen ist UTC**, der tägliche Zeitplan verwendet die HA-Zeitzone. Eine zufällige Lauf-ID verhindert Namenskonflikte bei manuellen Sicherungen.
 

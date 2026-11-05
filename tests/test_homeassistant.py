@@ -3,14 +3,14 @@ import copy
 import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from types import MappingProxyType
+from types import MappingProxyType, SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from homeassistant import config_entries, loader
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
-from homeassistant.exceptions import HomeAssistantError
+from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady, HomeAssistantError
 
 from custom_components.notion_backup import BackupRuntime, _reload
 from custom_components.notion_backup.api import AuthenticationError, BackupError
@@ -20,6 +20,7 @@ from custom_components.notion_backup.config_flow import (
     NotionBackupOptionsFlow,
 )
 from custom_components.notion_backup.const import DOMAIN
+from custom_components.notion_backup.linked_onedrive import linked_drive
 from custom_components.notion_backup.sensor import LastSuccessSensor, StatusSensor
 
 ROOT = "11111111-1111-1111-1111-111111111111"
@@ -317,7 +318,8 @@ async def test_refresh_rotation_does_not_reload_running_integration(hass):
         reload.assert_awaited_once_with(entry.entry_id)
 
 
-async def test_real_ha_entry_setup_loads_entities_and_unloads_cleanly(hass):
+@pytest.mark.parametrize("linked_mode", [False, True])
+async def test_real_ha_entry_setup_loads_entities_and_unloads_cleanly(hass, linked_mode):
     """Exercise actual loader/platform APIs, not just entity constructors."""
     from homeassistant.helpers import area_registry, device_registry, entity_registry
     from homeassistant.setup import async_setup_component
@@ -336,7 +338,12 @@ async def test_real_ha_entry_setup_loads_entities_and_unloads_cleanly(hass):
     device_registry.async_setup(hass)
     await device_registry.async_load(hass, load_empty=True)
     await entity_registry.async_load(hass, load_empty=True)
-    entry = make_entry(hass)
+    data = copy.deepcopy(DATA)
+    if linked_mode:
+        source = make_onedrive_entry(hass)
+        data["onedrive_entry_id"] = source.entry_id
+        del data["client_id"], data["refresh_token"]
+    entry = make_entry(hass, data)
     with (
         patch.object(BackupRuntime, "start"),
         patch.object(BackupRuntime, "load", new_callable=AsyncMock),
@@ -375,3 +382,170 @@ def test_translation_keys_match_and_json_files_are_valid():
     assert keys(en) == keys(de)
     assert en == json.loads((base / "translations/en.json").read_text())
     assert json.loads((base / "manifest.json").read_text())["config_flow"] is True
+
+
+def make_onedrive_entry(hass, *, state=config_entries.ConfigEntryState.LOADED):
+    entry = config_entries.ConfigEntry(
+        data={
+            "token": {
+                "access_token": "private-source-token",
+                "refresh_token": "private-source-refresh",
+            }
+        },
+        options={},
+        domain="onedrive",
+        title="Family OneDrive",
+        source="user",
+        unique_id="family-drive",
+        version=1,
+        minor_version=2,
+        discovery_keys=MappingProxyType({}),
+        subentries_data=[],
+        state=state,
+    )
+    entry.runtime_data = SimpleNamespace(
+        token_function=AsyncMock(return_value="source-access"),
+        client=SimpleNamespace(
+            get_approot=AsyncMock(return_value=SimpleNamespace(id="app-root", name="Graph"))
+        ),
+    )
+    hass.config_entries._entries[entry.entry_id] = entry
+    return entry
+
+
+async def test_existing_onedrive_is_offered_and_no_ms_app_is_needed(hass, api_mocks):
+    source = make_onedrive_entry(hass)
+    flow = NotionBackupConfigFlow()
+    flow.hass, flow.context = hass, {"source": "user"}
+    flow.values = copy.deepcopy(DATA)
+    menu = await flow.async_step_onedrive()
+    assert menu["type"] == FlowResultType.MENU
+    assert "onedrive_existing" in menu["menu_options"]
+    form = await flow.async_step_onedrive_existing()
+    assert form["type"] == FlowResultType.FORM
+    with patch(
+        "custom_components.notion_backup.config_flow.linked_drive", new_callable=AsyncMock
+    ) as linked:
+        linked.return_value = (object(), {"id": "family-drive"}, "app-root", "Graph")
+        result = await flow.async_step_onedrive_existing({"onedrive_entry_id": source.entry_id})
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    assert result["data"]["onedrive_entry_id"] == source.entry_id
+    assert result["data"]["drive_id"] == "family-drive"
+    assert "refresh_token" not in result["data"]
+    assert "client_id" not in result["data"]
+    assert "private-source-token" not in json.dumps(result["data"])
+    api_mocks[1].device_code.assert_not_called()
+
+
+async def test_missing_selected_onedrive_does_not_fall_back_to_another_account(hass, api_mocks):
+    make_onedrive_entry(hass)
+    flow = NotionBackupConfigFlow()
+    flow.hass, flow.context = hass, {"source": "user"}
+    flow.values = copy.deepcopy(DATA)
+    with patch(
+        "custom_components.notion_backup.config_flow.linked_drive", new_callable=AsyncMock
+    ) as linked:
+        result = await flow.async_step_onedrive_existing({"onedrive_entry_id": "removed-account"})
+        assert result["errors"]["base"] == "onedrive_unavailable"
+        linked.assert_not_called()
+
+
+async def test_linked_bridge_uses_source_callback_and_app_root(hass):
+    source = make_onedrive_entry(hass)
+    with (
+        patch(
+            "custom_components.notion_backup.linked_onedrive.async_get_clientsession",
+            return_value=object(),
+        ),
+        patch("custom_components.notion_backup.linked_onedrive.OneDriveClient") as cls,
+    ):
+        cls.return_value.request = AsyncMock(return_value={"id": "family-drive"})
+        drive, info, root_id, root_name = await linked_drive(hass, source.entry_id, "family-drive")
+        assert root_id == "app-root" and root_name == "Graph"
+        assert info["id"] == "family-drive"
+        assert await cls.call_args.kwargs["token_provider"]() == "source-access"
+        source.runtime_data.token_function.assert_awaited_once()
+        assert source.data["token"]["refresh_token"] == "private-source-refresh"
+
+
+async def test_linked_bridge_refuses_unloaded_or_wrong_domain_entries(hass):
+    source = make_onedrive_entry(hass, state=config_entries.ConfigEntryState.SETUP_RETRY)
+    with pytest.raises(BackupError, match="not ready"):
+        await linked_drive(hass, source.entry_id)
+    source.runtime_data.token_function.assert_not_called()
+    other = make_entry(hass)
+    with pytest.raises(BackupError, match="missing or disabled"):
+        await linked_drive(hass, other.entry_id)
+
+
+async def test_linked_bridge_refuses_changed_drive_identity(hass):
+    source = make_onedrive_entry(hass)
+    with (
+        patch(
+            "custom_components.notion_backup.linked_onedrive.async_get_clientsession",
+            return_value=object(),
+        ),
+        patch("custom_components.notion_backup.linked_onedrive.OneDriveClient") as cls,
+    ):
+        cls.return_value.request = AsyncMock(return_value={"id": "other-drive"})
+        with pytest.raises(AuthenticationError, match="identity changed"):
+            await linked_drive(hass, source.entry_id, "family-drive")
+        source.runtime_data.client.get_approot.assert_not_called()
+
+
+async def test_linked_token_error_reauthenticates_source_not_notion(hass):
+    source = make_onedrive_entry(hass)
+    source.runtime_data.token_function.side_effect = ConfigEntryAuthFailed("synthetic")
+    with (
+        patch(
+            "custom_components.notion_backup.linked_onedrive.async_get_clientsession",
+            return_value=object(),
+        ),
+        patch("custom_components.notion_backup.linked_onedrive.OneDriveClient") as cls,
+        patch.object(config_entries.ConfigEntry, "async_start_reauth", autospec=True) as reauth,
+    ):
+        cls.return_value.request = AsyncMock(return_value={"id": "family-drive"})
+        await linked_drive(hass, source.entry_id)
+        with pytest.raises(AuthenticationError, match="existing HA connection"):
+            await cls.call_args.kwargs["token_provider"]()
+        reauth.assert_called_once_with(source, hass)
+
+
+async def test_linked_runtime_uploads_zip_in_app_folder(hass, runtime_mocks):
+    source = make_onedrive_entry(hass)
+    data = {k: v for k, v in DATA.items() if k not in {"client_id", "refresh_token"}}
+    data["onedrive_entry_id"] = source.entry_id
+    data["drive_id"] = "family-drive"
+    runtime = BackupRuntime(hass, make_entry(hass, data))
+    runtime.store = MagicMock(async_save=AsyncMock())
+    drive = runtime_mocks[1]
+    with patch("custom_components.notion_backup.linked_drive", new_callable=AsyncMock) as linked:
+        linked.return_value = (drive, {"id": "family-drive"}, "app-root", "Graph")
+        await runtime.run()
+        linked.assert_awaited_once_with(hass, source.entry_id, "family-drive")
+    assert runtime.state["status"] == "completed"
+    assert runtime.state["destination"] == "Apps/Graph/Notion Backups"
+    assert drive.folder.call_args.kwargs == {"root_id": "app-root"}
+    assert "Test account_" in drive.folder.call_args.args[1][-1]
+    drive.upload.assert_awaited_once()
+
+
+async def test_removed_linked_account_stops_backup_before_export(hass, runtime_mocks):
+    data = {k: v for k, v in DATA.items() if k not in {"client_id", "refresh_token"}}
+    data["onedrive_entry_id"] = "removed"
+    runtime = BackupRuntime(hass, make_entry(hass, data))
+    runtime.store = MagicMock(async_save=AsyncMock())
+    await runtime.run()
+    assert runtime.state["status"] == "failed"
+    assert runtime.state["last_success"] is None
+    runtime_mocks[2].run.assert_not_called()
+    runtime_mocks[1].upload.assert_not_called()
+
+
+async def test_linked_setup_waits_for_source_during_ha_startup(hass):
+    from custom_components.notion_backup import async_setup_entry
+
+    source = make_onedrive_entry(hass, state=config_entries.ConfigEntryState.NOT_LOADED)
+    data = {**DATA, "onedrive_entry_id": source.entry_id}
+    with pytest.raises(ConfigEntryNotReady, match="Waiting"):
+        await async_setup_entry(hass, make_entry(hass, data))
