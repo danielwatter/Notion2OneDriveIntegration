@@ -317,3 +317,37 @@ async def test_graph_error_reports_operation_and_safe_code_only():
                 await drive.request("GET", "probe", operation="folder lookup")
             assert str(error.value) == "OneDrive folder lookup: HTTP 400 (invalidRequest)"
             assert "secret" not in str(error.value)
+
+
+async def test_personal_upload_session_payload_matches_ha_sdk_and_probe_is_cancelled():
+    async with aiohttp.ClientSession() as session:
+        drive = OneDriveClient(
+            session,
+            "",
+            "",
+            None,
+            token_provider=AsyncMock(return_value="access"),
+            use_me=True,
+        )
+        url = f"{GRAPH_API}/me/drive/items/folder:/connection-check.zip:/createUploadSession"
+        upload_url = "https://upload.example.com/signed-session"
+        with aioresponses() as mock:
+            mock.post(url, payload={"uploadUrl": upload_url})
+            mock.delete(upload_url, status=204)
+            await drive.check_upload("validated-drive", "folder", "connection-check.zip")
+            post_call = next(
+                c for (method, _), calls in mock.requests.items() if method == "POST" for c in calls
+            )
+            assert post_call.kwargs["json"] == {
+                "item": {"@microsoft.graph.conflictBehavior": "rename"},
+                "deferCommit": False,
+                "name": "connection-check.zip",
+            }
+            delete_call = next(
+                c
+                for (method, _), calls in mock.requests.items()
+                if method == "DELETE"
+                for c in calls
+            )
+            assert "Authorization" not in delete_call.kwargs.get("headers", {})
+            assert all(method != "PUT" for method, _ in mock.requests)

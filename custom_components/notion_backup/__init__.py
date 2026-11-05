@@ -210,6 +210,11 @@ class BackupRuntime:
                 folder_id = await drive.folder(info["id"], parts, root_id=app_root_id)
             else:
                 folder_id = await drive.folder(info["id"], parts)
+            await drive.check_upload(
+                info["id"],
+                folder_id,
+                f"Notion_{safe_name(self.entry.title)}_connection_check_{uuid4().hex[:8]}.zip",
+            )
             self.state.update(phase="exporting", last_activity=dt_util.utcnow().isoformat())
             await self.save()
             temporary = Path(

@@ -183,6 +183,7 @@ def runtime_mocks():
         notion.return_value.identity = AsyncMock(return_value={"id": BOT})
         drive.return_value.request = AsyncMock(return_value={"id": "test-drive"})
         drive.return_value.folder = AsyncMock(return_value="folder")
+        drive.return_value.check_upload = AsyncMock()
         drive.return_value.upload = AsyncMock(return_value={"id": "uploaded", "size": 123})
         exporter.return_value.run = AsyncMock(
             return_value={
@@ -553,6 +554,19 @@ async def test_linked_setup_waits_for_source_during_ha_startup(hass):
 
 async def test_destination_failure_happens_before_notion_export(hass, runtime_mocks):
     runtime_mocks[1].folder.side_effect = BackupError("OneDrive folder lookup: HTTP 400")
+    runtime = BackupRuntime(hass, make_entry(hass))
+    runtime.store = MagicMock(async_save=AsyncMock())
+    await runtime.run()
+    assert runtime.state["status"] == "failed"
+    assert runtime.state["phase"] == "checking_destination"
+    runtime_mocks[2].run.assert_not_called()
+    runtime_mocks[3].assert_not_called()
+
+
+async def test_upload_session_failure_happens_before_notion_export(hass, runtime_mocks):
+    runtime_mocks[1].check_upload.side_effect = BackupError(
+        "OneDrive upload session creation: HTTP 400"
+    )
     runtime = BackupRuntime(hass, make_entry(hass))
     runtime.store = MagicMock(async_save=AsyncMock())
     await runtime.run()

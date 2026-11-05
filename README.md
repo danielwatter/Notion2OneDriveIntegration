@@ -4,7 +4,7 @@
 
 Home-Assistant-Custom-Integration für tägliche **ZIP-Sicherungen von Notion-Inhalten und Anhängen** nach OneDrive. Mehrere Notion-Verbindungen werden als separate Instanzen eingerichtet. Installation direkt aus Git per SSH; HACS ist optional.
 
-**Stand: 0.2.1.** Unterstützt und automatisch getestet mit Home Assistant Core **2026.10.4 und 2026.11.0**. Bereits eingerichtete OneDrive-Verbindungen lassen sich ohne eigene Microsoft-App-Registrierung verwenden. Version 0.2.1 verwendet dafür die gleiche `me/drive`-Adressierung wie die HA-OneDrive-Bibliothek und schließt relative Pfadadressen korrekt ab. Der Zielordner wird vor dem Notion-Export geprüft; Fehler nennen jetzt den betroffenen OneDrive-Schritt und den sicheren API-Fehlercode.
+**Stand: 0.2.2.** Unterstützt und automatisch getestet mit Home Assistant Core **2026.10.4 und 2026.11.0**. Bereits eingerichtete OneDrive-Verbindungen lassen sich ohne eigene Microsoft-App-Registrierung verwenden. Die OneDrive-Aufrufe verwenden die `me/drive`-Adressierung und das Upload-Sitzungsformat der HA-OneDrive-Bibliothek. Vor dem Notion-Export werden Zielordner und Upload-Sitzung geprüft. Die Prüfsitzung wird ohne Dateiübertragung wieder geschlossen. Fehler nennen den betroffenen OneDrive-Schritt und den sicheren API-Fehlercode.
 
 ## Funktionen
 

@@ -104,6 +104,8 @@ async def json_request(session, method, url, *, service, **kwargs):
                     except (aiohttp.ClientError, ValueError, TypeError, AttributeError):
                         pass
                     raise ApiError(service, response.status, code)
+                if response.status == 204:
+                    return {}
                 return await response.json()
         except (aiohttp.ClientError, TimeoutError):
             if attempt == 4:
@@ -284,23 +286,41 @@ class OneDriveClient:
             parent = f"items/{quote(item['id'], safe='')}"
         return parent.split("/")[-1]
 
-    async def upload(self, drive_id: str, folder_id: str, path: Path):
-        size = await asyncio.to_thread(lambda: path.stat().st_size)
+    async def prepare_upload(self, drive_id: str, folder_id: str, name: str):
         endpoint = (
             f"{self.drive_base(drive_id)}/items/{quote(folder_id, safe='')}:"
-            f"/{quote(path.name, safe='')}:/createUploadSession"
+            f"/{quote(name, safe='')}:/createUploadSession"
         )
         session = await self.request(
             "POST",
             endpoint,
             operation="upload session creation",
             json={
-                "item": {"@microsoft.graph.conflictBehavior": "fail", "name": path.name},
+                # Match the request body used by HA's OneDrive SDK for personal drives.
+                "item": {"@microsoft.graph.conflictBehavior": "rename"},
+                "deferCommit": False,
+                "name": name,
             },
         )
         upload_url = session["uploadUrl"]
         if urlsplit(upload_url).scheme != "https":
             raise BackupError("OneDrive: invalid upload URL")
+        return upload_url
+
+    async def check_upload(self, drive_id, folder_id, filename):
+        """Validate upload permission and protocol before downloading Notion content."""
+        upload_url = await self.prepare_upload(drive_id, folder_id, filename)
+        # A cancelled session creates no file and does not send any Notion content.
+        await json_request(
+            self.session,
+            "DELETE",
+            upload_url,
+            service="OneDrive upload-session check",
+        )
+
+    async def upload(self, drive_id: str, folder_id: str, path: Path):
+        size = await asyncio.to_thread(lambda: path.stat().st_size)
+        upload_url = await self.prepare_upload(drive_id, folder_id, path.name)
         handle = await asyncio.to_thread(path.open, "rb")
         try:
             offset, result = 0, None

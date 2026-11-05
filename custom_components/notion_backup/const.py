@@ -1,7 +1,7 @@
 """Constants for Notion Backup."""
 
 DOMAIN = "notion_backup"
-VERSION = "0.2.1"
+VERSION = "0.2.2"
 NOTION_VERSION = "2025-09-03"
 NOTION_API = "https://api.notion.com/v1"
 GRAPH_API = "https://graph.microsoft.com/v1.0"
