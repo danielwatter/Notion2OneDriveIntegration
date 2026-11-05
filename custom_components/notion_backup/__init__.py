@@ -162,7 +162,12 @@ class BackupRuntime:
 
     async def run(self):
         temporary = None
-        self.state.update(status="running", error=None, last_attempt=dt_util.utcnow().isoformat())
+        self.state.update(
+            status="running",
+            error=None,
+            phase="checking_destination",
+            last_attempt=dt_util.utcnow().isoformat(),
+        )
         await self.save()
         try:
             session = async_get_clientsession(self.hass)
@@ -198,6 +203,15 @@ class BackupRuntime:
                 info = await drive.request("GET", "me/drive")
                 if info["id"] != self.settings["drive_id"]:
                     raise AuthenticationError("OneDrive destination identity changed")
+            parts = folder_parts(self.settings["backup_folder"]) + [
+                f"{safe_name(self.entry.title)}_{self.settings['notion_bot_id']}",
+            ]
+            if app_root_id is not None:
+                folder_id = await drive.folder(info["id"], parts, root_id=app_root_id)
+            else:
+                folder_id = await drive.folder(info["id"], parts)
+            self.state.update(phase="exporting", last_activity=dt_util.utcnow().isoformat())
+            await self.save()
             temporary = Path(
                 await self.hass.async_add_executor_job(tempfile.mkdtemp, "", "notion_backup_")
             )
@@ -207,6 +221,14 @@ class BackupRuntime:
                 notion, content, self.entry.title, parse_roots(self.settings["root_pages"])
             )
             manifest = await exporter.run()
+            self.state.update(
+                phase="creating_zip",
+                last_activity=dt_util.utcnow().isoformat(),
+                pages=sum(o["type"] == "page" for o in manifest["objects"]),
+                attachments=len(manifest["attachments"]),
+                errors=len(manifest["errors"]),
+            )
+            await self.save()
             stamp = dt_util.utcnow().strftime("%Y-%m-%d_%H%M%S")
             suffix = "" if manifest["complete"] else "_INCOMPLETE"
             filename = f"Notion_{safe_name(self.entry.title)}_{stamp}_{uuid4().hex[:8]}{suffix}.zip"
@@ -220,13 +242,8 @@ class BackupRuntime:
             except asyncio.CancelledError:
                 await worker
                 raise
-            parts = folder_parts(self.settings["backup_folder"]) + [
-                f"{safe_name(self.entry.title)}_{self.settings['notion_bot_id']}",
-            ]
-            if app_root_id is not None:
-                folder_id = await drive.folder(info["id"], parts, root_id=app_root_id)
-            else:
-                folder_id = await drive.folder(info["id"], parts)
+            self.state.update(phase="uploading", last_activity=dt_util.utcnow().isoformat())
+            await self.save()
             item = await drive.upload(info["id"], folder_id, archive_path)
             self.state.update(
                 status="completed" if manifest["complete"] else "incomplete",
@@ -236,6 +253,8 @@ class BackupRuntime:
                 pages=sum(o["type"] == "page" for o in manifest["objects"]),
                 attachments=len(manifest["attachments"]),
                 errors=len(manifest["errors"]),
+                phase="finished",
+                last_activity=dt_util.utcnow().isoformat(),
             )
             if manifest["complete"]:
                 self.state["last_success"] = dt_util.utcnow().isoformat()

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import ipaddress
+import re
 import time
 from collections.abc import Awaitable, Callable
 from pathlib import Path
@@ -26,9 +27,11 @@ class AuthenticationError(BackupError):
 class ApiError(BackupError):
     """HTTP failure with status, without response payload or signed URLs."""
 
-    def __init__(self, service: str, status: int):
+    def __init__(self, service: str, status: int, code: str | None = None):
         self.status = status
-        super().__init__(f"{service}: HTTP {status}")
+        self.code = code
+        suffix = f" ({code})" if code else ""
+        super().__init__(f"{service}: HTTP {status}{suffix}")
 
 
 def notion_id(value: str) -> str:
@@ -90,7 +93,17 @@ async def json_request(session, method, url, *, service, **kwargs):
                         await asyncio.sleep(min(max(delay, 1), 60))
                         continue
                 if response.status >= 400:
-                    raise ApiError(service, response.status)
+                    code = None
+                    try:
+                        payload = await response.json()
+                        candidate = payload.get("error", {}).get("code")
+                        if isinstance(candidate, str) and re.fullmatch(
+                            r"[A-Za-z0-9_]{1,80}", candidate
+                        ):
+                            code = candidate
+                    except (aiohttp.ClientError, ValueError, TypeError, AttributeError):
+                        pass
+                    raise ApiError(service, response.status, code)
                 return await response.json()
         except (aiohttp.ClientError, TimeoutError):
             if attempt == 4:
@@ -196,6 +209,7 @@ class OneDriveClient:
         save_refresh: Callable[[str], Awaitable[None]],
         *,
         token_provider: Callable[[], Awaitable[str]] | None = None,
+        use_me: bool = False,
     ):
         self.session = session
         self.auth = MicrosoftAuth(session, client_id)
@@ -204,6 +218,7 @@ class OneDriveClient:
         self.access_token = ""
         self.expires = 0.0
         self.token_provider = token_provider
+        self.use_me = use_me
 
     async def token(self):
         if self.token_provider is not None:
@@ -225,22 +240,27 @@ class OneDriveClient:
             self.expires = time.monotonic() + max(0, data.get("expires_in", 3600) - 120)
         return self.access_token
 
-    async def request(self, method, path, **kwargs):
+    async def request(self, method, path, *, operation=None, **kwargs):
         return await json_request(
             self.session,
             method,
             f"{GRAPH_API}/{path}",
-            service="OneDrive",
+            service=f"OneDrive {operation}" if operation else "OneDrive",
             headers={"Authorization": f"Bearer {await self.token()}"},
             **kwargs,
         )
 
+    def drive_base(self, drive_id):
+        # App-folder-scoped personal accounts use the same route as HA's SDK.
+        return "me/drive" if self.use_me else f"drives/{quote(drive_id, safe='')}"
+
     async def folder(self, drive_id, parts, *, root_id=None):
         parent = f"items/{quote(root_id, safe='')}" if root_id else "root"
         for part in parts:
-            base = f"drives/{quote(drive_id, safe='')}/{parent}"
+            base = f"{self.drive_base(drive_id)}/{parent}"
+            item_path = f"{base}:/{quote(part, safe='')}:"
             try:
-                item = await self.request("GET", f"{base}:/{quote(part, safe='')}")
+                item = await self.request("GET", item_path, operation="folder lookup")
             except ApiError as err:
                 if err.status != 404:
                     raise
@@ -248,6 +268,7 @@ class OneDriveClient:
                     item = await self.request(
                         "POST",
                         f"{base}/children",
+                        operation="folder creation",
                         json={
                             "name": part,
                             "folder": {},
@@ -257,7 +278,7 @@ class OneDriveClient:
                 except ApiError as conflict:
                     if conflict.status != 409:
                         raise
-                    item = await self.request("GET", f"{base}:/{quote(part, safe='')}")
+                    item = await self.request("GET", item_path, operation="folder lookup")
             if "folder" not in item:
                 raise BackupError("OneDrive: backup path contains a file")
             parent = f"items/{quote(item['id'], safe='')}"
@@ -266,12 +287,13 @@ class OneDriveClient:
     async def upload(self, drive_id: str, folder_id: str, path: Path):
         size = await asyncio.to_thread(lambda: path.stat().st_size)
         endpoint = (
-            f"drives/{quote(drive_id, safe='')}/items/{quote(folder_id, safe='')}:"
+            f"{self.drive_base(drive_id)}/items/{quote(folder_id, safe='')}:"
             f"/{quote(path.name, safe='')}:/createUploadSession"
         )
         session = await self.request(
             "POST",
             endpoint,
+            operation="upload session creation",
             json={
                 "item": {"@microsoft.graph.conflictBehavior": "fail", "name": path.name},
             },
@@ -305,7 +327,8 @@ class OneDriveClient:
             # Check the committed item, rather than treating chunk acceptance as completion.
             item = await self.request(
                 "GET",
-                f"drives/{quote(drive_id, safe='')}/items/{quote(result['id'], safe='')}",
+                f"{self.drive_base(drive_id)}/items/{quote(result['id'], safe='')}",
+                operation="upload verification",
             )
             if item.get("size") != size:
                 raise BackupError("OneDrive: committed ZIP size mismatch")

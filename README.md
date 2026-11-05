@@ -4,7 +4,7 @@
 
 Home-Assistant-Custom-Integration für tägliche **ZIP-Sicherungen von Notion-Inhalten und Anhängen** nach OneDrive. Mehrere Notion-Verbindungen werden als separate Instanzen eingerichtet. Installation direkt aus Git per SSH; HACS ist optional.
 
-**Stand: 0.2.0.** Unterstützt und automatisch getestet mit Home Assistant Core **2026.10.4 und 2026.11.0**. Ab Version 0.2.0 kann eine **bereits in Home Assistant eingerichtete OneDrive-Verbindung** ausgewählt werden. Das funktioniert mit OneDrive Personal / Microsoft 365 Family ohne eigene Microsoft-App-Registrierung. Ein echter Sicherungslauf mit deinen Accounts ist nach der Einrichtung noch zu prüfen.
+**Stand: 0.2.1.** Unterstützt und automatisch getestet mit Home Assistant Core **2026.10.4 und 2026.11.0**. Bereits eingerichtete OneDrive-Verbindungen lassen sich ohne eigene Microsoft-App-Registrierung verwenden. Version 0.2.1 verwendet dafür die gleiche `me/drive`-Adressierung wie die HA-OneDrive-Bibliothek und schließt relative Pfadadressen korrekt ab. Der Zielordner wird vor dem Notion-Export geprüft; Fehler nennen jetzt den betroffenen OneDrive-Schritt und den sicheren API-Fehlercode.
 
 ## Funktionen
 
@@ -136,6 +136,8 @@ Dokumente werden unabhängig von temporären Notion-Downloadlinks als echte Date
 Unter **Konfigurieren** können Startseiten, OneDrive-Basisordner und tägliche Uhrzeit angepasst werden. Für eine zusätzliche Notion-Verbindung eine weitere Instanz hinzufügen. Abgelaufene/entzogene Zugangsdaten lösen eine erneute Anmeldung aus.
 
 Der Status unterscheidet `idle`, `running`, `completed`, `incomplete`, `failed` und `interrupted`. „Letzte erfolgreiche Sicherung“ wird nur nach einem vollständigen Export und bestätigten Upload aktualisiert. Die Attribute des Statussensors enthalten den letzten Dateinamen, Anzahl Seiten/Anhänge und einen sicheren Fehlertext. Bestehende Backups bleiben bei einem Fehler erhalten.
+
+Das Attribut `phase` zeigt den aktuellen Schritt: `checking_destination`, `exporting`, `creating_zip`, `uploading` oder `finished`. `last_activity` wird beim Wechsel des Schritts aktualisiert; es ist kein kontinuierlicher Download-Zähler.
 
 ## Entwicklung
 

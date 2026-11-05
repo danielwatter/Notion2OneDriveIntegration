@@ -549,3 +549,14 @@ async def test_linked_setup_waits_for_source_during_ha_startup(hass):
     data = {**DATA, "onedrive_entry_id": source.entry_id}
     with pytest.raises(ConfigEntryNotReady, match="Waiting"):
         await async_setup_entry(hass, make_entry(hass, data))
+
+
+async def test_destination_failure_happens_before_notion_export(hass, runtime_mocks):
+    runtime_mocks[1].folder.side_effect = BackupError("OneDrive folder lookup: HTTP 400")
+    runtime = BackupRuntime(hass, make_entry(hass))
+    runtime.store = MagicMock(async_save=AsyncMock())
+    await runtime.run()
+    assert runtime.state["status"] == "failed"
+    assert runtime.state["phase"] == "checking_destination"
+    runtime_mocks[2].run.assert_not_called()
+    runtime_mocks[3].assert_not_called()

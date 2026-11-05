@@ -52,6 +52,7 @@ async def linked_drive(hass, entry_id, expected_drive_id=None):
         "",
         None,
         token_provider=token,
+        use_me=True,
     )
     info = await drive.request("GET", "me/drive")
     if expected_drive_id is not None and info["id"] != expected_drive_id:

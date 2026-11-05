@@ -168,12 +168,12 @@ async def test_folder_creation_and_reuse():
         drive = OneDriveClient(session, "client", "refresh", AsyncMock())
         drive.token = AsyncMock(return_value="access")
         with aioresponses() as mock:
-            mock.get(f"{GRAPH_API}/drives/drive/root:/Notion%20Backups", status=404)
+            mock.get(f"{GRAPH_API}/drives/drive/root:/Notion%20Backups:", status=404)
             mock.post(
                 f"{GRAPH_API}/drives/drive/root/children", payload={"id": "base", "folder": {}}
             )
             mock.get(
-                f"{GRAPH_API}/drives/drive/items/base:/account",
+                f"{GRAPH_API}/drives/drive/items/base:/account:",
                 payload={"id": "account-id", "folder": {}},
             )
             assert await drive.folder("drive", ["Notion Backups", "account"]) == "account-id"
@@ -265,7 +265,7 @@ async def test_linked_folder_is_created_inside_app_root_not_drive_root():
             session, "", "", None, token_provider=AsyncMock(return_value="access")
         )
         with aioresponses() as mock:
-            mock.get(f"{GRAPH_API}/drives/drive/items/app-root:/Notion%20Backups", status=404)
+            mock.get(f"{GRAPH_API}/drives/drive/items/app-root:/Notion%20Backups:", status=404)
             mock.post(
                 f"{GRAPH_API}/drives/drive/items/app-root/children",
                 payload={"id": "notion-folder", "folder": {}},
@@ -275,3 +275,45 @@ async def test_linked_folder_is_created_inside_app_root_not_drive_root():
                 == "notion-folder"
             )
             assert all("/root" not in str(url) for _, url in mock.requests)
+
+
+async def test_personal_app_folder_uses_me_route_and_closed_path_address():
+    async with aiohttp.ClientSession() as session:
+        drive = OneDriveClient(
+            session,
+            "",
+            "",
+            None,
+            token_provider=AsyncMock(return_value="access"),
+            use_me=True,
+        )
+        with aioresponses() as mock:
+            mock.get(f"{GRAPH_API}/me/drive/items/app-root:/DHW%20Holding:", status=404)
+            mock.post(
+                f"{GRAPH_API}/me/drive/items/app-root/children",
+                payload={"id": "folder", "folder": {}},
+            )
+            assert (
+                await drive.folder("validated-drive-id", ["DHW Holding"], root_id="app-root")
+                == "folder"
+            )
+            assert all("/drives/" not in str(url) for _, url in mock.requests)
+
+
+async def test_graph_error_reports_operation_and_safe_code_only():
+    async with aiohttp.ClientSession() as session:
+        drive = OneDriveClient(
+            session, "", "", None, token_provider=AsyncMock(return_value="secret")
+        )
+        with aioresponses() as mock:
+            mock.get(
+                f"{GRAPH_API}/probe",
+                status=400,
+                payload={
+                    "error": {"code": "invalidRequest", "message": "secret-token and private-url"}
+                },
+            )
+            with pytest.raises(ApiError) as error:
+                await drive.request("GET", "probe", operation="folder lookup")
+            assert str(error.value) == "OneDrive folder lookup: HTTP 400 (invalidRequest)"
+            assert "secret" not in str(error.value)
