@@ -15,7 +15,7 @@ from urllib.parse import quote, unquote, urljoin, urlsplit
 import aiohttp
 
 from .api import BackupError, PublicResolver, validate_download_url
-from .const import MAX_ATTACHMENT_BYTES, NOTION_VERSION
+from .const import MAX_ATTACHMENT_BYTES, NOTION_VERSION, VERSION
 
 
 def safe_name(value: str, fallback="untitled") -> str:
@@ -108,7 +108,7 @@ class Exporter:
         self.visited = set()
         self.manifest = {
             "format_version": 1,
-            "integration_version": "0.1.0",
+            "integration_version": VERSION,
             "notion_api_version": NOTION_VERSION,
             "created_at": datetime.now(UTC).isoformat(),
             "label": label,

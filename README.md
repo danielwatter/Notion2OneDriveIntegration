@@ -2,7 +2,7 @@
 
 Home-Assistant-Custom-Integration für tägliche **ZIP-Sicherungen von Notion-Inhalten und Anhängen** nach OneDrive. Mehrere Notion-Verbindungen werden als separate Instanzen eingerichtet. Installation direkt aus Git per SSH; HACS ist optional.
 
-**Stand: 0.1.0, erste Version.** Entwicklung und automatisierte Tests gegen Home Assistant Core 2026.11.0. Ein echter Sicherungslauf mit deinen Accounts und auf dem Green ist nach der Einrichtung noch zu prüfen.
+**Stand: 0.1.1.** Unterstützt und automatisch getestet mit Home Assistant Core **2026.10.4 und 2026.11.0**. Version 0.1.1 berücksichtigt den geänderten Rückgabewert beim Laden/Entladen von Integrationen ab HA 2026.11. Ein echter Sicherungslauf mit deinen Accounts ist nach der Einrichtung noch zu prüfen.
 
 ## Funktionen
 

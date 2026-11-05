@@ -11,7 +11,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import EVENT_HOMEASSISTANT_STOP, Platform
+from homeassistant.const import EVENT_HOMEASSISTANT_STOP, MAJOR_VERSION, MINOR_VERSION, Platform
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
@@ -43,12 +43,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     runtime.start()
     entry.async_on_unload(hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STOP, runtime.stop_event))
     entry.async_on_unload(entry.add_update_listener(_reload))
+    # HA 2026.10 requires bool; 2026.11 changed the contract to None.
+    return True if (MAJOR_VERSION, MINOR_VERSION) < (2026, 11) else None
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry):
     await entry.runtime_data.stop()
     if not await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
         raise HomeAssistantError("Notion Backup platforms could not be unloaded")
+    return True if (MAJOR_VERSION, MINOR_VERSION) < (2026, 11) else None
 
 
 async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry):
