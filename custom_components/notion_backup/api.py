@@ -257,6 +257,7 @@ class OneDriveClient:
         return "me/drive" if self.use_me else f"drives/{quote(drive_id, safe='')}"
 
     async def folder(self, drive_id, parts, *, root_id=None):
+        folder_id = root_id
         parent = f"items/{quote(root_id, safe='')}" if root_id else "root"
         for part in parts:
             base = f"{self.drive_base(drive_id)}/{parent}"
@@ -283,8 +284,11 @@ class OneDriveClient:
                     item = await self.request("GET", item_path, operation="folder lookup")
             if "folder" not in item:
                 raise BackupError("OneDrive: backup path contains a file")
-            parent = f"items/{quote(item['id'], safe='')}"
-        return parent.split("/")[-1]
+            folder_id = item["id"]
+            parent = f"items/{quote(folder_id, safe='')}"
+        # Return the raw Graph ID, not the URL-escaped path segment. Personal IDs
+        # contain '!' and would otherwise become %2521 when upload() escapes again.
+        return folder_id or "root"
 
     async def prepare_upload(self, drive_id: str, folder_id: str, name: str):
         endpoint = (

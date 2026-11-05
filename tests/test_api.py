@@ -351,3 +351,29 @@ async def test_personal_upload_session_payload_matches_ha_sdk_and_probe_is_cance
             )
             assert "Authorization" not in delete_call.kwargs.get("headers", {})
             assert all(method != "PUT" for method, _ in mock.requests)
+
+
+async def test_personal_folder_id_is_not_double_encoded_for_upload():
+    async with aiohttp.ClientSession() as session:
+        drive = OneDriveClient(
+            session,
+            "",
+            "",
+            None,
+            token_provider=AsyncMock(return_value="access"),
+            use_me=True,
+        )
+        with aioresponses() as mock:
+            mock.get(f"{GRAPH_API}/me/drive/items/DRIVE%21app:/Backups:", status=404)
+            mock.post(
+                f"{GRAPH_API}/me/drive/items/DRIVE%21app/children",
+                payload={"id": "DRIVE!123", "folder": {}},
+            )
+            folder_id = await drive.folder("drive", ["Backups"], root_id="DRIVE!app")
+            assert folder_id == "DRIVE!123"
+            mock.post(
+                f"{GRAPH_API}/me/drive/items/DRIVE%21123:/backup.zip:/createUploadSession",
+                payload={"uploadUrl": "https://upload.example.com/session"},
+            )
+            await drive.prepare_upload("drive", folder_id, "backup.zip")
+            assert all("%2521" not in str(url) for _, url in mock.requests)
